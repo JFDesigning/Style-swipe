@@ -85,6 +85,17 @@ main{max-width:1060px;margin:0 auto;padding:12px}
 .collage .word{display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:19px;color:#fff;text-align:center;padding:10px;border-radius:10px;grid-column:span 2}
 .swatches{display:flex;gap:6px;margin:12px 0 8px}.swatches i{flex:1;height:22px;border-radius:6px}
 .links a{color:var(--camel);font-weight:700;font-size:14px;text-decoration:none;margin-right:16px}
+.mode{display:flex;gap:8px;margin-bottom:12px}.mode button{flex:1;padding:12px;border-radius:14px;border:1px solid var(--esp);background:#fff;color:var(--esp);font-weight:600;font-size:14px;cursor:pointer}.mode button.on{background:var(--esp);color:#fff}
+.pickgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px}
+.pickgrid .tile{height:150px;border-radius:12px}
+.pickgrid .tile .lab{position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.92);font-size:11px;padding:4px 6px;line-height:1.2}
+.panel{background:#fff;border-radius:16px;padding:14px;box-shadow:0 4px 14px rgba(59,42,33,.08);margin-bottom:14px}
+.panel h4{font-family:Georgia,serif;font-weight:400;font-size:20px;margin:0 0 6px}
+.panel .prev{height:260px;border-radius:12px;overflow:hidden;margin:10px 0;background:#EFE8DF}
+.panel input[type=text]{width:100%;padding:9px;border:1px solid var(--line);border-radius:10px;font-size:14px;margin:6px 0}
+.sugg{position:absolute;left:6px;top:6px;background:var(--gold);color:var(--esp);font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;z-index:2}
+.why2{font-size:13px;color:#5A4A3E;line-height:1.4;margin:6px 0}
+.tog{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px}
 .note{font-size:12px;color:var(--muted);text-align:center;margin-top:16px}
 @media (max-width:600px){.filters{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;padding-bottom:4px}.collage{grid-template-columns:repeat(2,1fr);grid-auto-rows:130px}.photo{height:370px}.deck{height:620px}nav button{padding:6px 9px;font-size:12px}}
 </style>
@@ -101,9 +112,9 @@ main{max-width:1060px;margin:0 auto;padding:12px}
 </section>
 <section id="v-wish" hidden>
   <div class="sync" id="sync"></div>
-  <div class="subnav"><button class="chip on" data-sub="pieces">Pieces</button><button class="chip" data-sub="outfits">Outfits</button></div>
-  <div class="bar"><div id="wsum"></div><div style="display:flex;gap:8px"><button class="btn" id="bCopy">Copy list</button><button class="btn" id="bClear">Clear</button></div></div>
-  <div class="grid2" id="wgrid"></div>
+  <div class="subnav"><button class="chip on" data-sub="pieces">Pieces</button><button class="chip" data-sub="outfits">Outfits</button><button class="chip" data-sub="create">✨ Create outfit</button></div>
+  <div class="bar" id="wbar"><div id="wsum"></div><div style="display:flex;gap:8px"><button class="btn" id="bCopy">Copy list</button><button class="btn" id="bClear">Clear</button></div></div>
+  <div class="grid2" id="wgrid"></div><div id="create"></div>
 </section>
 <section id="v-boards" hidden></section>
 <div class="note">Photos, prices and links come from each store's own site (mostly Quince, plus FAITHFULL). Check stock in your size before buying.</div>
@@ -229,7 +240,8 @@ function renderSync(){ $('#sync').innerHTML=`<div><b>Google Sheet</b> · <a clas
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn dark" id="syncSave">Save</button><button class="btn" id="syncAll">Send everything I've saved</button></div>`;
   $('#syncSave').onclick=()=>{ syncUrl=$('#syncIn').value.trim(); LS.set('ss3_sync',syncUrl); renderSync(); toast(syncUrl?'Sync on':'Sync off'); };
   $('#syncAll').onclick=()=>{ if(!syncUrl){toast('Paste the URL first');return;} wish.forEach((w,i)=>setTimeout(()=>syncAddPiece(w),i*350)); outfits.forEach((o,i)=>setTimeout(()=>syncAddOutfit(o),(wish.length+i)*350)); toast('Sending to your sheet…'); }; }
-function renderWish(){ renderSync(); document.querySelectorAll('[data-sub]').forEach(b=>b.classList.toggle('on',b.dataset.sub===sub)); const g=$('#wgrid');
+function renderWish(){ renderSync(); document.querySelectorAll('[data-sub]').forEach(b=>b.classList.toggle('on',b.dataset.sub===sub)); const g=$('#wgrid'); $('#create').innerHTML=''; $('#wbar').style.display=sub==='create'?'none':''; g.style.display=sub==='create'?'none':'';
+  if(sub==='create'){ renderCreate(); return; }
   if(sub==='pieces'){ const items=wish.map(w=>({w,p:byId(w.id)})).filter(x=>x.p);
     if(!items.length){ g.innerHTML='<div class="empty" style="grid-column:1/-1">No pieces yet.</div>'; $('#wsum').textContent=''; return; }
     $('#wsum').innerHTML=`<b>${items.length}</b> pieces · <b>$${items.reduce((s,x)=>s+x.p.price,0).toLocaleString(undefined,{maximumFractionDigits:0})}</b>`;
@@ -244,6 +256,74 @@ document.querySelectorAll('[data-sub]').forEach(b=>b.onclick=()=>{ sub=b.dataset
 $('#bCopy').onclick=()=>{ const lines=['PIECES'].concat(wish.map(w=>byId(w.id)).filter(Boolean).map(p=>`${p.name} (${p.brand}) - ${CATS[p.cat]} - size ${SIZE[p.cat]} - $${p.price} - ${p.url}`),['','OUTFITS'],outfits.map(o=>`"${o.name}": `+o.parts.map(byId).filter(Boolean).map(p=>p.name).join(' + ')));
   const txt=lines.join('\n'); (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Copied')).catch(()=>{ const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select(); try{document.execCommand('copy');toast('Copied');}catch(e){} t.remove(); }); };
 $('#bClear').onclick=()=>{ if(sub==='pieces'){ wish.forEach(w=>syncRemovePiece(w.id)); wish=[]; } else { outfits.forEach(syncRemoveOutfit); outfits=[]; } save(); renderWish(); };
+
+
+// ---------- create outfits ----------
+let cmode='ai', manualSel=[], fillGaps=true, proposals=[];
+const ROLE=p=>({top:'top',knit:'top',bottom:'bottom',skirt:'bottom',dress:'dress',outer:'outer',shoe:'shoe',bag:'acc',acc:'acc'})[p.cat];
+const ACCENTS=['olive','emerald','oxblood','rust','denim'];
+function scoreSet(ps){ let s=0; const vib={}; ps.forEach(p=>p.vibes.forEach(v=>vib[v]=(vib[v]||0)+1)); const best=Math.max(0,...Object.values(vib)); s+=best*3;
+  const acc=new Set(ps.map(p=>p.col).filter(c=>ACCENTS.includes(c))); s-= acc.size>1?(acc.size-1)*4:0;
+  for(let i=0;i<ps.length;i++)for(let j=i+1;j<ps.length;j++) if(!harm(ps[i].col,ps[j].col)) s-=3;
+  const cities=ps.reduce((a,p)=>a.filter(c=>p.cities.includes(c)),['la','nyc','mia']); s+=cities.length; return s+Math.random()*1.5; }
+function topVibe(ps){ const vib={}; ps.forEach(p=>p.vibes.forEach(v=>vib[v]=(vib[v]||0)+1)); return Object.keys(vib).sort((a,b)=>vib[b]-vib[a])[0]||'ql'; }
+function bestAdd(base,pool){ let best=null,bs=-1e9; pool.forEach(p=>{ if(base.includes(p))return; const sc=scoreSet(base.concat(p)); if(sc>bs){bs=sc;best=p;} }); return best; }
+function stylist(){
+  const saved=wish.map(w=>byId(w.id)).filter(Boolean); const by=r=>saved.filter(p=>ROLE(p)===r);
+  const cat=r=>P.filter(p=>ROLE(p)===r);
+  const bases=[]; by('dress').forEach(d=>bases.push([d]));
+  by('top').forEach(t=>{ const bots=by('bottom').length?by('bottom'):(fillGaps?cat('bottom'):[]); bots.forEach(b=>bases.push([t,b])); });
+  if(!by('top').length&&fillGaps) by('bottom').forEach(b=>cat('top').forEach(t=>bases.push([t,b])));
+  if(!bases.length) return [];
+  const cands=bases.map(base=>{ let ps=base.slice();
+    const add=(r,opt)=>{ const own=by(r).filter(p=>!ps.includes(p)); let pool=own.length?own:(fillGaps&&!opt?cat(r):[]); if(!pool.length&&fillGaps&&opt&&Math.random()<0.4) pool=cat(r); if(!pool.length)return; const x=bestAdd(ps,pool); if(x&&scoreSet(ps.concat(x))>=scoreSet(ps)-3) ps.push(x); };
+    add('outer',true); add('shoe',false); add('acc',true);
+    return {ps,score:scoreSet(ps)-ps.filter(p=>!saved.includes(p)).length*1.5}; });
+  cands.sort((a,b)=>b.score-a.score); const out=[], used=new Set();
+  for(const c of cands){ const key=c.ps.slice(0,2).map(p=>p.id).join(); if(used.has(key))continue; used.add(key); out.push(c.ps); if(out.length===3)break; }
+  return out.map(ps=>({ps,vibe:topVibe(ps),name:pick(NAMES[topVibe(ps)]),saved}));
+}
+function whyText(ps,vibe){ const cols=[...new Set(ps.map(p=>CNAME[p.col]))]; const parts=[`${VIBES[vibe]} look in ${cols.slice(0,3).join(', ').toLowerCase()}.`];
+  if(ps.some(p=>ROLE(p)==='dress')) parts.push('One long line from shoulder to hem shows off your height.');
+  else parts.push('Tuck the top in so your waist stays defined.');
+  if(ps.some(p=>ROLE(p)==='outer')) parts.push('The jacket adds structure to your shoulders and balances your long legs.');
+  if(ps.some(p=>p.col==='emerald'||p.col==='olive')) parts.push('The green brings out your eyes.');
+  if(ps.some(p=>ROLE(p)==='acc')) parts.push('The accessory adds a warm, gold-toned finishing touch.');
+  return parts.join(' '); }
+function saveOutfitFrom(ps,name,vibe){ const o={oid:'o'+Date.now(),name:name||pick(NAMES[vibe]),vibe,parts:ps.map(p=>p.id),date:today()}; outfits.push(o); syncAddOutfit(o); save(); toast('Outfit saved'); }
+function renderCreate(){ const c=$('#create'); const saved=wish.map(w=>byId(w.id)).filter(Boolean);
+  let h=`<div class="mode"><button data-m="ai" class="${cmode==='ai'?'on':''}">✨ Style it for me</button><button data-m="manual" class="${cmode==='manual'?'on':''}">Build my own</button></div>`;
+  if(!saved.length){ c.innerHTML=h+'<div class="empty">Save some pieces first, then come back here.</div>'; wireMode(); return; }
+  if(cmode==='manual'){
+    const sel=manualSel.map(byId).filter(Boolean);
+    h+=`<div class="panel"><h4>Build my own</h4><div style="font-size:13px;color:#5A4A3E">Tap the pieces you want to wear together.</div>
+      ${sel.length?`<div class="prev">${gridHTML(sel.slice(0,5),false)}</div>`:''}
+      <div style="font-size:13px">${sel.length} selected${sel.length?` · $${sel.reduce((s,p)=>s+p.price,0).toFixed(0)}`:''}${sel.length>5?' (preview shows 5)':''}</div>
+      <input type="text" id="oname" placeholder="Name this outfit (e.g. Dinner in Miami)">
+      <div style="display:flex;gap:8px"><button class="btn dark" id="msave" ${sel.length<2?'disabled style="opacity:.4"':''}>Save outfit</button><button class="btn" id="mclear">Clear</button></div></div>
+      <div class="pickgrid">${saved.map(p=>`<div class="tile ${manualSel.includes(p.id)?'sel':''}" data-pid="${p.id}">${imgTag(p)}<span class="chk">✓</span><div class="lab">${esc(p.name)}</div></div>`).join('')}</div>`;
+    c.innerHTML=h; wireMode();
+    c.querySelectorAll('.pickgrid .tile').forEach(t=>t.onclick=()=>{ const id=t.dataset.pid; manualSel=manualSel.includes(id)?manualSel.filter(x=>x!==id):manualSel.concat(id); renderCreate(); });
+    const ms=$('#msave'); if(ms) ms.onclick=()=>{ if(sel.length<2)return; saveOutfitFrom(sel,$('#oname').value.trim(),topVibe(sel)); manualSel=[]; renderCreate(); };
+    $('#mclear').onclick=()=>{ manualSel=[]; renderCreate(); };
+    return; }
+  if(!proposals.length) proposals=stylist();
+  h+=`<label class="tog"><input type="checkbox" id="fg" ${fillGaps?'checked':''}> Fill gaps with new picks (like shoes or a jacket) if my saved pieces are missing them</label>`;
+  if(!proposals.length) h+='<div class="empty">I need at least a top and a bottom, or a dress, to make an outfit. Turn on “Fill gaps” or save a few more pieces.</div>';
+  proposals.forEach((o,i)=>{ const savedIds=new Set(wish.map(w=>w.id));
+    h+=`<div class="panel"><h4>“${esc(o.name)}”</h4><div class="brand">${VIBES[o.vibe]} · ${o.ps.length} pieces · $${o.ps.reduce((s,p)=>s+p.price,0).toFixed(0)}</div>
+      <div class="prev"><div class="ogrid n${Math.min(o.ps.length,5)}">${o.ps.slice(0,5).map(p=>`<div class="tile">${imgTag(p)}${savedIds.has(p.id)?'':'<span class="sugg">NEW PICK</span>'}</div>`).join('')}</div></div>
+      <div class="why2">${whyText(o.ps,o.vibe)}</div>
+      <div style="font-size:12.5px;margin-bottom:10px">${o.ps.map(p=>`<a href="${p.url}" target="_blank" rel="noopener" style="color:var(--ink);text-decoration:none">${esc(p.name)} <span style="color:var(--camel)">$${p.price.toFixed(0)} ↗</span></a>${savedIds.has(p.id)?'':' <span style="color:var(--gold);font-weight:700">new</span>'}`).join('<br>')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn dark" data-sv="${i}">♥ Save outfit</button><button class="btn" data-ed="${i}">Edit in Build my own</button></div></div>`; });
+  h+=`<div style="text-align:center"><button class="btn" id="reroll">↻ Show me different outfits</button></div>`;
+  c.innerHTML=h; wireMode();
+  $('#fg').onchange=e=>{ fillGaps=e.target.checked; proposals=[]; renderCreate(); };
+  $('#reroll').onclick=()=>{ proposals=[]; renderCreate(); };
+  c.querySelectorAll('[data-sv]').forEach(b=>b.onclick=()=>{ const o=proposals[+b.dataset.sv]; o.ps.forEach(p=>{ if(!wish.some(w=>w.id===p.id)){ const w={id:p.id,from:'Added by stylist for “'+o.name+'”',date:today()}; wish.push(w); syncAddPiece(w);} }); saveOutfitFrom(o.ps,o.name,o.vibe); b.textContent='Saved ✓'; b.disabled=true; });
+  c.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{ const o=proposals[+b.dataset.ed]; o.ps.forEach(p=>{ if(!wish.some(w=>w.id===p.id)){ const w={id:p.id,from:'Added by stylist',date:today()}; wish.push(w); syncAddPiece(w);} }); save(); manualSel=o.ps.map(p=>p.id); cmode='manual'; renderCreate(); });
+}
+function wireMode(){ document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{ cmode=b.dataset.m; if(cmode==='ai') proposals=[]; renderCreate(); }); }
 
 // ---------- moodboards ----------
 const BOARDS=[
