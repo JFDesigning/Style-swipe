@@ -112,7 +112,7 @@ main{max-width:1060px;margin:0 auto;padding:12px}
 </section>
 <section id="v-wish" hidden>
   <div class="sync" id="sync"></div>
-  <div class="subnav"><button class="chip on" data-sub="pieces">Pieces</button><button class="chip" data-sub="outfits">Outfits</button><button class="chip" data-sub="create">✨ Create outfit</button></div>
+  <div class="subnav"><button class="chip on" data-sub="pieces">Pieces</button><button class="chip" data-sub="outfits">Outfits</button></div>
   <div class="bar" id="wbar"><div id="wsum"></div><div style="display:flex;gap:8px"><button class="btn" id="bCopy">Copy list</button><button class="btn" id="bClear">Clear</button></div></div>
   <div class="grid2" id="wgrid"></div><div id="create"></div>
 </section>
@@ -240,15 +240,16 @@ function renderSync(){ $('#sync').innerHTML=`<div><b>Google Sheet</b> · <a clas
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn dark" id="syncSave">Save</button><button class="btn" id="syncAll">Send everything I've saved</button></div>`;
   $('#syncSave').onclick=()=>{ syncUrl=$('#syncIn').value.trim(); LS.set('ss3_sync',syncUrl); renderSync(); toast(syncUrl?'Sync on':'Sync off'); };
   $('#syncAll').onclick=()=>{ if(!syncUrl){toast('Paste the URL first');return;} wish.forEach((w,i)=>setTimeout(()=>syncAddPiece(w),i*350)); outfits.forEach((o,i)=>setTimeout(()=>syncAddOutfit(o),(wish.length+i)*350)); toast('Sending to your sheet…'); }; }
-function renderWish(){ renderSync(); document.querySelectorAll('[data-sub]').forEach(b=>b.classList.toggle('on',b.dataset.sub===sub)); const g=$('#wgrid'); $('#create').innerHTML=''; $('#wbar').style.display=sub==='create'?'none':''; g.style.display=sub==='create'?'none':'';
+function renderWish(){ renderSync(); document.querySelectorAll('[data-sub]').forEach(b=>b.classList.toggle('on',b.dataset.sub===sub||(sub==='create'&&b.dataset.sub==='outfits'))); const g=$('#wgrid'); $('#create').innerHTML=''; $('#wbar').style.display=sub==='create'?'none':''; g.style.display=sub==='create'?'none':'';
   if(sub==='create'){ renderCreate(); return; }
   if(sub==='pieces'){ const items=wish.map(w=>({w,p:byId(w.id)})).filter(x=>x.p);
     if(!items.length){ g.innerHTML='<div class="empty" style="grid-column:1/-1">No pieces yet.</div>'; $('#wsum').textContent=''; return; }
     $('#wsum').innerHTML=`<b>${items.length}</b> pieces · <b>$${items.reduce((s,x)=>s+x.p.price,0).toLocaleString(undefined,{maximumFractionDigits:0})}</b>`;
     g.innerHTML=items.map(({w,p})=>`<div class="wcard"><div class="ph">${imgTag(p)}</div><div class="b"><span class="brand">${p.brand} · ${CATS[p.cat]}</span><strong>${p.name}</strong><span style="color:var(--muted)">Size ${SIZE[p.cat]} · $${p.price.toFixed(0)}</span><span style="color:var(--muted);font-size:11px">${esc(w.from)}</span><div class="row"><a href="${p.url}" target="_blank" rel="noopener">Shop ↗</a><button data-rm="${p.id}">Remove</button></div></div></div>`).join('');
     g.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ wish=wish.filter(w=>w.id!==b.dataset.rm); syncRemovePiece(b.dataset.rm); save(); renderWish(); });
-  } else { if(!outfits.length){ g.innerHTML='<div class="empty" style="grid-column:1/-1">No outfits yet. Use “Save outfit” on an outfit card.</div>'; $('#wsum').textContent=''; return; }
-    $('#wsum').innerHTML=`<b>${outfits.length}</b> outfits`;
+  } else { $('#wsum').innerHTML=`<button class="btn dark" id="makeBtn" style="font-size:14px;padding:9px 16px">＋ Make outfits</button> ${outfits.length?`<span style="margin-left:6px"><b>${outfits.length}</b> outfits</span>`:''}`;
+    $('#makeBtn').onclick=()=>{ sub='create'; cmode=null; proposals=[]; renderWish(); };
+    if(!outfits.length){ g.innerHTML='<div class="empty" style="grid-column:1/-1">No outfits yet. Tap “＋ Make outfits”, or use “Save outfit” on an outfit card while swiping.</div>'; return; }
     g.innerHTML=outfits.map(o=>{ const ps=o.parts.map(byId).filter(Boolean); return `<div class="wcard"><div class="ph">${gridHTML(ps,false)}</div><div class="b"><span class="brand">${VIBES[o.vibe]||''}</span><strong>“${esc(o.name)}”</strong><span style="color:var(--muted)">${ps.length} pieces · $${ps.reduce((s,p)=>s+p.price,0).toFixed(0)}</span><span style="font-size:12px">${ps.map(p=>`<a href="${p.url}" target="_blank" rel="noopener">${esc(p.name)} ↗</a>`).join('<br>')}</span><div class="row"><button class="split" data-split="${o.oid}">Split into pieces</button><button data-rmo="${o.oid}">Remove</button></div></div></div>`; }).join('');
     g.querySelectorAll('[data-split]').forEach(b=>b.onclick=()=>{ const o=outfits.find(x=>x.oid===b.dataset.split); o.parts.forEach(id=>{ if(!wish.some(w=>w.id===id)){ const w={id,from:'From outfit “'+o.name+'”',date:today()}; wish.push(w); syncAddPiece(w);} }); save(); toast('Added each piece to Pieces'); });
     g.querySelectorAll('[data-rmo]').forEach(b=>b.onclick=()=>{ const o=outfits.find(x=>x.oid===b.dataset.rmo); outfits=outfits.filter(x=>x!==o); syncRemoveOutfit(o); save(); renderWish(); }); } }
@@ -259,7 +260,7 @@ $('#bClear').onclick=()=>{ if(sub==='pieces'){ wish.forEach(w=>syncRemovePiece(w
 
 
 // ---------- create outfits ----------
-let cmode='ai', manualSel=[], fillGaps=true, proposals=[];
+let cmode=null, manualSel=[], fillGaps=true, proposals=[];
 const ROLE=p=>({top:'top',knit:'top',bottom:'bottom',skirt:'bottom',dress:'dress',outer:'outer',shoe:'shoe',bag:'acc',acc:'acc'})[p.cat];
 const ACCENTS=['olive','emerald','oxblood','rust','denim'];
 function scoreSet(ps){ let s=0; const vib={}; ps.forEach(p=>p.vibes.forEach(v=>vib[v]=(vib[v]||0)+1)); const best=Math.max(0,...Object.values(vib)); s+=best*3;
@@ -292,11 +293,16 @@ function whyText(ps,vibe){ const cols=[...new Set(ps.map(p=>CNAME[p.col]))]; con
   return parts.join(' '); }
 function saveOutfitFrom(ps,name,vibe){ const o={oid:'o'+Date.now(),name:name||pick(NAMES[vibe]),vibe,parts:ps.map(p=>p.id),date:today()}; outfits.push(o); syncAddOutfit(o); save(); toast('Outfit saved'); }
 function renderCreate(){ const c=$('#create'); const saved=wish.map(w=>byId(w.id)).filter(Boolean);
-  let h=`<div class="mode"><button data-m="ai" class="${cmode==='ai'?'on':''}">✨ Style it for me</button><button data-m="manual" class="${cmode==='manual'?'on':''}">Build my own</button></div>`;
+  let h=`<div style="margin-bottom:10px"><a href="#" id="backO" style="color:var(--camel);font-weight:700;text-decoration:none;font-size:14px">← Back to outfits</a></div>`;
+  if(!cmode){ h+=`<div class="panel"><h4>Make outfits</h4><div style="font-size:13px;color:#5A4A3E;margin-bottom:12px">How do you want to make them?</div>
+    <div class="mode" style="flex-direction:column"><button data-m="manual" style="padding:18px;text-align:left">Manual<br><span style="font-weight:400;font-size:12.5px">Pick the pieces yourself from what you've saved</span></button>
+    <button data-m="ai" style="padding:18px;text-align:left;background:var(--esp);color:#fff">✨ Auto-style<br><span style="font-weight:400;font-size:12.5px">The stylist puts your saved pieces into outfits for you</span></button></div></div>`;
+    c.innerHTML=h; wireMode(); return; }
+  h+=`<div class="mode"><button data-m="ai" class="${cmode==='ai'?'on':''}">✨ Auto-style</button><button data-m="manual" class="${cmode==='manual'?'on':''}">Manual</button></div>`;
   if(!saved.length){ c.innerHTML=h+'<div class="empty">Save some pieces first, then come back here.</div>'; wireMode(); return; }
   if(cmode==='manual'){
     const sel=manualSel.map(byId).filter(Boolean);
-    h+=`<div class="panel"><h4>Build my own</h4><div style="font-size:13px;color:#5A4A3E">Tap the pieces you want to wear together.</div>
+    h+=`<div class="panel"><h4>Manual</h4><div style="font-size:13px;color:#5A4A3E">Tap the pieces you want to wear together.</div>
       ${sel.length?`<div class="prev">${gridHTML(sel.slice(0,5),false)}</div>`:''}
       <div style="font-size:13px">${sel.length} selected${sel.length?` · $${sel.reduce((s,p)=>s+p.price,0).toFixed(0)}`:''}${sel.length>5?' (preview shows 5)':''}</div>
       <input type="text" id="oname" placeholder="Name this outfit (e.g. Dinner in Miami)">
@@ -315,7 +321,7 @@ function renderCreate(){ const c=$('#create'); const saved=wish.map(w=>byId(w.id
       <div class="prev"><div class="ogrid n${Math.min(o.ps.length,5)}">${o.ps.slice(0,5).map(p=>`<div class="tile">${imgTag(p)}${savedIds.has(p.id)?'':'<span class="sugg">NEW PICK</span>'}</div>`).join('')}</div></div>
       <div class="why2">${whyText(o.ps,o.vibe)}</div>
       <div style="font-size:12.5px;margin-bottom:10px">${o.ps.map(p=>`<a href="${p.url}" target="_blank" rel="noopener" style="color:var(--ink);text-decoration:none">${esc(p.name)} <span style="color:var(--camel)">$${p.price.toFixed(0)} ↗</span></a>${savedIds.has(p.id)?'':' <span style="color:var(--gold);font-weight:700">new</span>'}`).join('<br>')}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn dark" data-sv="${i}">♥ Save outfit</button><button class="btn" data-ed="${i}">Edit in Build my own</button></div></div>`; });
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn dark" data-sv="${i}">♥ Save outfit</button><button class="btn" data-ed="${i}">Edit manually</button></div></div>`; });
   h+=`<div style="text-align:center"><button class="btn" id="reroll">↻ Show me different outfits</button></div>`;
   c.innerHTML=h; wireMode();
   $('#fg').onchange=e=>{ fillGaps=e.target.checked; proposals=[]; renderCreate(); };
@@ -323,7 +329,7 @@ function renderCreate(){ const c=$('#create'); const saved=wish.map(w=>byId(w.id
   c.querySelectorAll('[data-sv]').forEach(b=>b.onclick=()=>{ const o=proposals[+b.dataset.sv]; o.ps.forEach(p=>{ if(!wish.some(w=>w.id===p.id)){ const w={id:p.id,from:'Added by stylist for “'+o.name+'”',date:today()}; wish.push(w); syncAddPiece(w);} }); saveOutfitFrom(o.ps,o.name,o.vibe); b.textContent='Saved ✓'; b.disabled=true; });
   c.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{ const o=proposals[+b.dataset.ed]; o.ps.forEach(p=>{ if(!wish.some(w=>w.id===p.id)){ const w={id:p.id,from:'Added by stylist',date:today()}; wish.push(w); syncAddPiece(w);} }); save(); manualSel=o.ps.map(p=>p.id); cmode='manual'; renderCreate(); });
 }
-function wireMode(){ document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{ cmode=b.dataset.m; if(cmode==='ai') proposals=[]; renderCreate(); }); }
+function wireMode(){ document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{ cmode=b.dataset.m; if(cmode==='ai') proposals=[]; renderCreate(); }); const bk=$('#backO'); if(bk) bk.onclick=e=>{ e.preventDefault(); sub='outfits'; cmode=null; renderWish(); }; }
 
 // ---------- moodboards ----------
 const BOARDS=[
